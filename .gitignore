@@ -1,0 +1,22 @@
+# --- Local-only files: never pushed to the public repository ---
+HUONG-DAN.md
+report/
+infra/*.local.*
+*.local.json
+.env
+
+# --- Python ---
+.venv/
+.venv-tools/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# --- Node (report tooling, if run inside the repo) ---
+node_modules/
+
+# --- OS / editor ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
