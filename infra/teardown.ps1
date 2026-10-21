@@ -8,7 +8,9 @@
 param([switch]$DryRun, [string]$Listing)
 . "$PSScriptRoot\config.ps1"
 
+$ip = $null
 try {
+    $ip = Get-PublicIp                  # kept unmasked in the listing, like every other script
     Write-Step ("Teardown of {0} in {1} (profile {2}){3}" -f $StackName, $Region, $AwsProfile, $(if ($DryRun) { ' - DRY RUN' } else { '' }))
     $stack = Invoke-AwsJson @('cloudformation', 'describe-stacks', '--stack-name', $StackName) -AllowFailure
     if (-not $stack) {
@@ -31,5 +33,5 @@ try {
     if (-not $DryRun) { Write-Step 'The Docker Hub repositories stay public; delete them on hub.docker.com when no longer needed.' }
 }
 finally {
-    Save-Listing $Listing
+    Save-Listing $Listing $ip
 }
