@@ -105,3 +105,14 @@ async def test_missing_schema_counts_as_unavailable():
     with pytest.raises(DatabaseUnavailable):
         await PollRepository(pool).get_poll("abc")
     await pool.close()
+
+
+async def test_closing_time_round_trips(repo):
+    from datetime import datetime, timezone
+    closes = datetime(2026, 10, 11, 9, 0, tzinfo=timezone.utc)
+    poll = await repo.create_poll("Lunch at noon?", ["Yes", "No"], closes_at=closes)
+    found = await repo.get_poll(poll.slug)
+    assert found.closes_at == closes
+    assert found.is_closed(closes) and not found.is_closed(datetime(2026, 10, 11, 8, 59, tzinfo=timezone.utc))
+    never = await repo.create_poll("Open forever", ["a", "b"])
+    assert (await repo.get_poll(never.slug)).closes_at is None

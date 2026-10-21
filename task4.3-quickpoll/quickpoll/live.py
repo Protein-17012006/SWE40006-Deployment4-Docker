@@ -7,6 +7,7 @@ import json
 import logging
 import time
 from contextlib import aclosing
+from datetime import datetime, timezone
 from typing import AsyncIterator, Callable
 
 from redis.exceptions import RedisError
@@ -49,17 +50,22 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 async def event_stream(poll, repo, live, lifetime: float = STREAM_LIFETIME_SECONDS,
-                       clock: Callable[[], float] = time.monotonic) -> AsyncIterator[str]:
+                       clock: Callable[[], float] = time.monotonic,
+                       now: Callable[[], datetime] = utcnow) -> AsyncIterator[str]:
     """Server-Sent Events for one results page: a snapshot first, then one event per vote."""
     yield "retry: 3000\n\n"
     deadline = clock() + lifetime
     try:
-        yield sse("results", (await repo.results(poll)).as_event())
+        yield sse("results", (await repo.results(poll)).as_event(now()))
         async with aclosing(live.subscribe(poll.id)) as updates:   # always unsubscribes
             async for kind in updates:
                 if kind == "update":
-                    yield sse("results", (await repo.results(poll)).as_event())
+                    yield sse("results", (await repo.results(poll)).as_event(now()))
                 else:
                     yield ": keep-alive\n\n"
                 if clock() >= deadline:

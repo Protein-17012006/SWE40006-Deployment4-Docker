@@ -8,6 +8,7 @@ import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -23,10 +24,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import security
 from .config import Settings, load_settings
 from .hostinfo import footer_text
-from .live import LiveUpdates, event_stream
+from .live import LiveUpdates, event_stream, utcnow
 from .ratelimit import RateLimiter
 from .repository import DatabaseUnavailable, InvalidOption, PollRepository
-from .validation import OPTIONS_MAX, parse_option_id, validate_poll
+from .validation import CLOSE_AFTER, OPTIONS_MAX, parse_option_id, validate_poll
 
 log = logging.getLogger("quickpoll")
 
@@ -46,8 +47,18 @@ SLUG_PATTERN = re.compile(r"[A-Za-z0-9]{1,12}")
 CREATE_LIMIT = (5, 3600)   # polls per IP per hour
 VOTE_LIMIT = (30, 60)      # votes per IP per minute
 
+CLOSE_CHOICES = [("never", "Never"), ("1h", "1 hour"), ("1d", "1 day"), ("7d", "7 days")]
 
-def create_app(settings: Settings | None = None, repo=None, redis=None) -> FastAPI:
+
+def close_status(poll, now: datetime) -> str | None:
+    """'Closes on ...' / 'Closed on ...' in UTC, or None for a poll that never closes."""
+    if poll.closes_at is None:
+        return None
+    when = poll.closes_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return f"Closed on {when}" if poll.is_closed(now) else f"Closes on {when}"
+
+
+def create_app(settings: Settings | None = None, repo=None, redis=None, clock=utcnow) -> FastAPI:
     """Build the app. Tests pass a fake `repo` and `redis`; in production the lifespan creates them."""
     settings = settings or load_settings()
     configure_logging()
@@ -128,7 +139,7 @@ def create_app(settings: Settings | None = None, repo=None, redis=None) -> FastA
 
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
-        return await render(request, "home.html", {"form": None, "errors": {}, "option_slots": OPTIONS_MAX})
+        return await render(request, "home.html", {"form": None, "errors": {}, "option_slots": OPTIONS_MAX, "close_choices": CLOSE_CHOICES})
 
     @app.post("/polls")
     async def create_poll(request: Request):
@@ -139,12 +150,16 @@ def create_app(settings: Settings | None = None, repo=None, redis=None) -> FastA
         if retry_after:
             return await error_page(request, 429, "Too many new polls from your address. Please try again later.",
                                     headers={"Retry-After": str(retry_after)})
-        poll_input = validate_poll(form.get("question"), form_values(form, "option"))
+        poll_input = validate_poll(form.get("question"), form_values(form, "option"),
+                                   form.get("close_after", "never"))
         if not poll_input.ok:
             return await render(request, "home.html",
-                                {"form": poll_input, "errors": poll_input.errors, "option_slots": OPTIONS_MAX},
+                                {"form": poll_input, "errors": poll_input.errors, "option_slots": OPTIONS_MAX,
+                                 "close_choices": CLOSE_CHOICES},
                                 status_code=422)
-        poll = await app.state.repo.create_poll(poll_input.question, poll_input.options)
+        delta = CLOSE_AFTER[poll_input.close_after]
+        closes_at = clock() + delta if delta else None
+        poll = await app.state.repo.create_poll(poll_input.question, poll_input.options, closes_at)
         log.info("poll %s created with %d options", poll.slug, len(poll.options))
         return RedirectResponse(f"/p/{poll.slug}", status_code=303)
 
@@ -154,7 +169,9 @@ def create_app(settings: Settings | None = None, repo=None, redis=None) -> FastA
         voter = security.parse_voter_id(request.cookies.get(security.VOTER_COOKIE))
         if voter is not None and await app.state.repo.has_voted(poll.id, voter):
             return RedirectResponse(f"/p/{poll.slug}/results", status_code=303)
-        return await render(request, "vote.html", {"poll": poll, "error": None})
+        now = clock()
+        return await render(request, "vote.html", {"poll": poll, "error": None, "closed": poll.is_closed(now),
+                                                   "close_text": close_status(poll, now)})
 
     @app.post("/p/{slug}/vote")
     async def vote(request: Request, slug: str):
@@ -166,15 +183,17 @@ def create_app(settings: Settings | None = None, repo=None, redis=None) -> FastA
         if retry_after:
             return await error_page(request, 429, "Too many votes from your address. Please wait a minute.",
                                     headers={"Retry-After": str(retry_after)})
+        if poll.is_closed(clock()):
+            return RedirectResponse(f"/p/{poll.slug}/results?closed=1", status_code=303)
         option_id = parse_option_id(form.get("option"))
         if option_id is None or not poll.has_option(option_id):
-            return await render(request, "vote.html", {"poll": poll, "error": "Choose one of the options."},
+            return await render(request, "vote.html", {"poll": poll, "error": "Choose one of the options.", "closed": False, "close_text": close_status(poll, clock())},
                                 status_code=422)
         voter = security.parse_voter_id(request.cookies.get(security.VOTER_COOKIE)) or uuid.uuid4()
         try:
             recorded = await app.state.repo.record_vote(poll.id, option_id, voter)
         except InvalidOption:
-            return await render(request, "vote.html", {"poll": poll, "error": "Choose one of the options."},
+            return await render(request, "vote.html", {"poll": poll, "error": "Choose one of the options.", "closed": False, "close_text": close_status(poll, clock())},
                                 status_code=422)
         if recorded:
             await app.state.live.publish(poll.id)
@@ -185,19 +204,20 @@ def create_app(settings: Settings | None = None, repo=None, redis=None) -> FastA
         return response
 
     @app.get("/p/{slug}/results", response_class=HTMLResponse)
-    async def results_page(request: Request, slug: str, already: str | None = None):
+    async def results_page(request: Request, slug: str, already: str | None = None, closed: str | None = None):
         poll = await find_poll(slug)
         results = await app.state.repo.results(poll)
-        notice = "You already voted in this poll." if already else None
+        notice = "This poll is closed." if closed else ("You already voted in this poll." if already else None)
         share_url = str(request.url_for("vote_page", slug=poll.slug))
         return await render(request, "results.html",
-                            {"poll": poll, "results": results, "notice": notice, "share_url": share_url})
+                            {"poll": poll, "results": results, "notice": notice, "share_url": share_url,
+                             "close_text": close_status(poll, clock())})
 
     @app.get("/p/{slug}/events")
     async def results_events(slug: str):
         poll = await find_poll(slug)
         return StreamingResponse(
-            event_stream(poll, app.state.repo, app.state.live),
+            event_stream(poll, app.state.repo, app.state.live, now=clock),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

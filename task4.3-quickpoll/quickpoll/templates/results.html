@@ -4,6 +4,7 @@
 <section class="card" data-events="/p/{{ poll.slug }}/events">
   <h1>{{ poll.question }}</h1>
   {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+  {% if close_text %}<p class="status">{{ close_text }}</p>{% endif %}
   <ul class="results">
     {% for option in results.options %}
     <li data-option="{{ option.id }}">

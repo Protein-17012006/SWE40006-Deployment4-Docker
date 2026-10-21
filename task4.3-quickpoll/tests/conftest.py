@@ -28,11 +28,11 @@ class FakeRepository:
         if self.down:
             raise DatabaseUnavailable("connection refused")
 
-    async def create_poll(self, question, options, slug_factory=None):
+    async def create_poll(self, question, options, closes_at=None, slug_factory=None):
         self._check()
         slug = f"poll{len(self.polls) + 1:04d}"
         poll = Poll(next(self._ids), slug, question, datetime.now(timezone.utc),
-                    tuple(Option(next(self._ids), label) for label in options))
+                    tuple(Option(next(self._ids), label) for label in options), closes_at)
         self.polls[slug] = poll
         return poll
 

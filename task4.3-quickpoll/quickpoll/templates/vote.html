@@ -3,6 +3,11 @@
 {% block content %}
 <section class="card">
   <h1>{{ poll.question }}</h1>
+  {% if closed %}
+  <p class="notice">This poll is closed. {{ close_text }}.</p>
+  <a href="/p/{{ poll.slug }}/results">See the final results</a>
+  {% else %}
+  {% if close_text %}<p class="status">{{ close_text }}</p>{% endif %}
   <form method="post" action="/p/{{ poll.slug }}/vote">
     <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
     <ul class="choices">
@@ -14,5 +19,6 @@
     <button type="submit">Vote</button>
     <a class="secondary" href="/p/{{ poll.slug }}/results">See results</a>
   </form>
+  {% endif %}
 </section>
 {% endblock %}

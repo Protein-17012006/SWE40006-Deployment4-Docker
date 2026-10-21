@@ -4,7 +4,7 @@ import secrets
 import string
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable
 
 import psycopg
@@ -41,6 +41,10 @@ class Poll:
     question: str
     created_at: datetime
     options: tuple[Option, ...]
+    closes_at: datetime | None = None
+
+    def is_closed(self, now: datetime) -> bool:
+        return self.closes_at is not None and now >= self.closes_at
 
     def has_option(self, option_id: int) -> bool:
         return any(option.id == option_id for option in self.options)
@@ -65,11 +69,11 @@ class Results:
     def percent(self, votes: int) -> float:
         return round(100 * votes / self.total, 1) if self.total else 0.0
 
-    def as_event(self) -> dict:
+    def as_event(self, now: datetime | None = None) -> dict:
         return {
             "total": self.total,
             "options": [{"id": o.id, "votes": o.votes, "percent": self.percent(o.votes)} for o in self.options],
-            "closed": False,
+            "closed": self.poll.is_closed(now or datetime.now(timezone.utc)),
         }
 
 
@@ -81,22 +85,22 @@ class PollRepository:
         self._pool = pool
         self._server_version: str | None = None
 
-    async def create_poll(self, question: str, options: list[str],
+    async def create_poll(self, question: str, options: list[str], closes_at: datetime | None = None,
                           slug_factory: Callable[[], str] = new_slug) -> Poll:
         for _ in range(SLUG_ATTEMPTS):
             slug = slug_factory()
             try:
-                return await self._insert_poll(slug, question, options)
+                return await self._insert_poll(slug, question, options, closes_at)
             except pg_errors.UniqueViolation:
                 continue  # slug taken: try another one
         raise RuntimeError(f"no free slug after {SLUG_ATTEMPTS} attempts")
 
-    async def _insert_poll(self, slug: str, question: str, options: list[str]) -> Poll:
+    async def _insert_poll(self, slug: str, question: str, options: list[str], closes_at: datetime | None) -> Poll:
         try:
             async with self._pool.connection() as conn, conn.transaction():
                 cur = await conn.execute(
-                    "INSERT INTO polls (slug, question) VALUES (%s, %s) RETURNING id, created_at",
-                    (slug, question),
+                    "INSERT INTO polls (slug, question, closes_at) VALUES (%s, %s, %s) RETURNING id, created_at",
+                    (slug, question, closes_at),
                 )
                 poll_id, created_at = await cur.fetchone()
                 saved = []
@@ -107,14 +111,14 @@ class PollRepository:
                     )
                     (option_id,) = await cur.fetchone()
                     saved.append(Option(option_id, label))
-                return Poll(poll_id, slug, question, created_at, tuple(saved))
+                return Poll(poll_id, slug, question, created_at, tuple(saved), closes_at)
         except _UNAVAILABLE as exc:
             raise DatabaseUnavailable(str(exc)) from exc
 
     async def get_poll(self, slug: str) -> Poll | None:
         try:
             async with self._pool.connection() as conn:
-                cur = await conn.execute("SELECT id, slug, question, created_at FROM polls WHERE slug = %s", (slug,))
+                cur = await conn.execute("SELECT id, slug, question, created_at, closes_at FROM polls WHERE slug = %s", (slug,))
                 row = await cur.fetchone()
                 if row is None:
                     return None
@@ -122,7 +126,7 @@ class PollRepository:
                     "SELECT id, label FROM options WHERE poll_id = %s ORDER BY position", (row[0],)
                 )
                 options = tuple(Option(option_id, label) for option_id, label in await cur.fetchall())
-                return Poll(row[0], row[1], row[2], row[3], options)
+                return Poll(row[0], row[1], row[2], row[3], options, row[4])
         except _UNAVAILABLE as exc:
             raise DatabaseUnavailable(str(exc)) from exc
 

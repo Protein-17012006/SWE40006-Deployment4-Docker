@@ -17,6 +17,13 @@
       {% endfor %}
     </fieldset>
     {% if errors.options %}<p class="error">{{ errors.options }}</p>{% endif %}
+    <label for="close_after">Close after</label>
+    <select id="close_after" name="close_after">
+      {% for value, label in close_choices %}
+      <option value="{{ value }}"{% if (form.close_after if form else 'never') == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    {% if errors.close_after %}<p class="error">{{ errors.close_after }}</p>{% endif %}
     <button type="submit">Create poll</button>
   </form>
 </section>
