@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Results · {{ poll.question }}{% endblock %}
+{% block content %}
+<section class="card" data-events="/p/{{ poll.slug }}/events">
+  <h1>{{ poll.question }}</h1>
+  {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+  <ul class="results">
+    {% for option in results.options %}
+    <li data-option="{{ option.id }}">
+      <span class="label">{{ option.label }}</span>
+      <meter min="0" max="100" value="{{ results.percent(option.votes) }}"></meter>
+      <span class="votes">{{ option.votes }} ({{ results.percent(option.votes) }}%)</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="total">Total votes: <strong id="total">{{ results.total }}</strong>
+     <span id="live-status" class="live">Refresh to update</span></p>
+  <div class="share">
+    <label for="share-url">Share this poll</label>
+    <input id="share-url" readonly value="{{ share_url }}">
+    <button type="button" id="copy-link">Copy link</button>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='results.js') }}" defer></script>{% endblock %}

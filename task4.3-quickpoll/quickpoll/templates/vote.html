@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ poll.question }} · Quick Poll{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ poll.question }}</h1>
+  <form method="post" action="/p/{{ poll.slug }}/vote">
+    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+    <ul class="choices">
+      {% for option in poll.options %}
+      <li><label><input type="radio" name="option" value="{{ option.id }}"> {{ option.label }}</label></li>
+      {% endfor %}
+    </ul>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <button type="submit">Vote</button>
+    <a class="secondary" href="/p/{{ poll.slug }}/results">See results</a>
+  </form>
+</section>
+{% endblock %}

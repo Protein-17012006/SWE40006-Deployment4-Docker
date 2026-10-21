@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ status }} · Quick Poll{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ status }}</h1>
+  <p>{{ message }}</p>
+  <p><a href="/">Back to Quick Poll</a></p>
+</section>
+{% endblock %}

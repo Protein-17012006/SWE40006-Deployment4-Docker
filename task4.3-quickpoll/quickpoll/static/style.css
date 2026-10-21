@@ -1,0 +1,34 @@
+:root {
+  --bg: #f4f6fb; --card: #ffffff; --ink: #1d2433; --muted: #5d6779; --accent: #2457d6;
+  --accent-ink: #ffffff; --border: #d9deea; --error: #b42318; --ok: #157f3b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+.top { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: baseline; padding: 1rem 1.5rem; background: var(--ink); }
+.brand { color: #fff; font-weight: 700; font-size: 1.3rem; text-decoration: none; }
+.tagline { color: #c9d1e4; }
+main { max-width: 760px; margin: 1.5rem auto; padding: 0 1rem; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.card.muted { background: #eef2fb; }
+h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+label { display: block; font-weight: 600; margin: .75rem 0 .25rem; }
+input:not([type]), input[readonly] { width: 100%; padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+fieldset { border: 0; padding: 0; margin: 1rem 0 0; display: grid; gap: .5rem; }
+legend { font-weight: 600; margin-bottom: .25rem; }
+button { margin-top: 1rem; padding: .6rem 1.2rem; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; }
+.secondary { margin-left: 1rem; }
+.error { color: var(--error); margin: .25rem 0 0; }
+.notice { background: #fff6dc; border: 1px solid #f0d58c; padding: .5rem .75rem; border-radius: 8px; }
+.choices { list-style: none; padding: 0; margin: 0; display: grid; gap: .4rem; }
+.choices label { font-weight: 400; margin: 0; padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.results { list-style: none; padding: 0; margin: 0; display: grid; gap: .75rem; }
+.results li { display: grid; gap: .2rem; }
+.results meter { width: 100%; height: 1.1rem; }
+.votes { color: var(--muted); font-size: .9rem; }
+.total { margin-top: 1rem; }
+.live { margin-left: .75rem; font-size: .85rem; padding: .1rem .5rem; border-radius: 999px; background: #e7ebf3; color: var(--muted); }
+.live.on { background: #dcf5e5; color: var(--ok); }
+.live.off { background: #fde8e6; color: var(--error); }
+.share { margin-top: 1rem; }
+.host { text-align: center; color: var(--muted); font-size: .85rem; padding: 1rem; }

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Create a poll</h1>
+  <form method="post" action="/polls" novalidate>
+    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+    <label for="question">Question</label>
+    <input id="question" name="question" maxlength="200" required
+           value="{{ form.question if form else '' }}" placeholder="What should we build next?">
+    {% if errors.question %}<p class="error">{{ errors.question }}</p>{% endif %}
+    <fieldset>
+      <legend>Options (2 to 6)</legend>
+      {% for i in range(option_slots) %}
+      <input name="option" maxlength="80" aria-label="Option {{ i + 1 }}"
+             value="{{ form.options[i] if form and i < form.options|length else '' }}"
+             placeholder="Option {{ i + 1 }}{{ ' (optional)' if i >= 2 else '' }}">
+      {% endfor %}
+    </fieldset>
+    {% if errors.options %}<p class="error">{{ errors.options }}</p>{% endif %}
+    <button type="submit">Create poll</button>
+  </form>
+</section>
+<section class="card muted">
+  <h2>Just looking?</h2>
+  <p>Vote in the demo poll: <a href="/p/docker">Which Docker feature do you use most?</a></p>
+</section>
+{% endblock %}
