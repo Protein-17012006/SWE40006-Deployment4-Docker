@@ -12,6 +12,7 @@ $Template    = 'infra/cfn/docker-host.yaml'
 $RepoRoot    = Split-Path -Parent $PSScriptRoot
 $CfnLint     = Join-Path $RepoRoot '.venv-tools\Scripts\cfn-lint.exe'
 $ListingsDir = Join-Path $RepoRoot 'report\listings'
+$env:PYTHONUTF8 = '1'                   # the AWS CLI then prints UTF-8, which is how PowerShell reads native output here
 
 $script:Log = New-Object 'System.Collections.Generic.List[string]'
 
