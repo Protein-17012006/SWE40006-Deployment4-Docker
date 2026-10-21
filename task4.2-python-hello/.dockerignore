@@ -1,0 +1,9 @@
+.venv/
+**/__pycache__/
+.pytest_cache/
+tests/
+compose.yaml
+compose.deploy.yaml
+requirements-dev.txt
+pytest.ini
+*.md

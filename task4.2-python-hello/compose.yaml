@@ -1,0 +1,19 @@
+# Tutorial part 3 equivalent: the web server and Redis on one network, so the visit counter works.
+name: friendlyhello
+
+services:
+  web:
+    build: .
+    image: friendlyhello:1.0.0
+    ports:
+      - "4000:80"
+    environment:
+      REDIS_HOST: redis
+      DEPLOY_TARGET: Laptop · Docker Compose
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped

@@ -1,0 +1,28 @@
+# friendlyhello on any Docker host, from the published image: the by-hand `docker run` commands of
+# Task 4.2, declared. On the EC2 host this file is /opt/swe40006-a4/hello/compose.yaml, next to an .env
+# with DOCKERHUB_USER, TAG and DEPLOY_TARGET (written by infra/deploy-app.ps1).
+name: hello
+
+services:
+  web:
+    image: ${DOCKERHUB_USER:?Set DOCKERHUB_USER in .env}/friendlyhello:${TAG:?Set TAG in .env}
+    ports:
+      - "4000:80"
+    environment:
+      REDIS_HOST: redis
+      DEPLOY_TARGET: ${DEPLOY_TARGET:-Docker Compose (published image)}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 192M }
+        reservations: { memory: 96M }
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 64M }
+        reservations: { memory: 16M }
