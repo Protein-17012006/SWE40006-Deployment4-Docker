@@ -1,0 +1,26 @@
+# Connect Four server on one machine, built from source. compose.deploy.yaml runs the same container from Docker Hub.
+name: connect4
+
+services:
+  connect4:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    image: connect4:${APP_VERSION:-dev}
+    command: ["serve", "--port", "2323", "--data", "/data"]
+    ports:
+      - "127.0.0.1:2323:2323"
+    volumes:
+      - c4data:/data
+    healthcheck:
+      test: ["CMD", "python", "-m", "connect4", "healthcheck", "--port", "2323"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  c4data:

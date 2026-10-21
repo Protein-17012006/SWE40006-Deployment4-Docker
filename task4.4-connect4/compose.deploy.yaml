@@ -1,0 +1,27 @@
+# Connect Four server on any Docker host, from the published image. On the EC2 host this file is
+# /opt/swe40006-a4/connect4/compose.yaml, next to an .env with DOCKERHUB_USER and TAG (written by infra/deploy-app.ps1).
+name: connect4
+
+services:
+  connect4:
+    image: ${DOCKERHUB_USER:?Set DOCKERHUB_USER in .env}/connect4:${TAG:?Set TAG in .env}
+    command: ["serve", "--port", "2323", "--data", "/data"]
+    ports:
+      - "2323:2323"
+    volumes:
+      - c4data:/data
+    healthcheck:
+      test: ["CMD", "python", "-m", "connect4", "healthcheck", "--port", "2323"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    stop_grace_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 128M }
+        reservations: { memory: 48M }
+
+volumes:
+  c4data:
