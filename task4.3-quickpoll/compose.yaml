@@ -1,0 +1,81 @@
+# Quick Poll on one machine, built from source. compose.deploy.yaml runs the same five containers from Docker Hub.
+name: quickpoll
+
+x-app-environment: &app-environment
+  DATABASE_HOST: postgres
+  DATABASE_NAME: quickpoll
+  DATABASE_USER: quickpoll
+  DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+  REDIS_URL: redis://redis:6379/0
+  DEPLOY_TARGET: Laptop · Docker Compose
+
+services:
+  proxy:
+    build:
+      context: ./proxy
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    image: quickpoll-proxy:${APP_VERSION:-dev}
+    ports:
+      - "127.0.0.1:8090:8080"
+    depends_on:
+      web:
+        condition: service_healthy
+        restart: true    # nginx resolves "web" only when it starts: restart it whenever web is recreated
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    image: quickpoll:${APP_VERSION:-dev}
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Same image as web (built once by the web service), different command.
+  migrate:
+    image: quickpoll:${APP_VERSION:-dev}
+    command: ["python", "-m", "quickpoll.migrate"]
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    image: postgres:18-alpine
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+    environment:
+      POSTGRES_DB: quickpoll
+      POSTGRES_USER: quickpoll
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickpoll -d quickpoll"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "32mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  pgdata:

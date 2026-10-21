@@ -1,0 +1,95 @@
+# Quick Poll on any Docker host, from the published images: the same five containers as compose.yaml.
+# On the EC2 host this file is /opt/swe40006-a4/quickpoll/compose.yaml, next to an .env with DOCKERHUB_USER,
+# WEB_TAG, PROXY_TAG, DEPLOY_TARGET and POSTGRES_PASSWORD (generated on the host by infra/deploy-app.ps1).
+name: quickpoll
+
+x-app-environment: &app-environment
+  DATABASE_HOST: postgres
+  DATABASE_NAME: quickpoll
+  DATABASE_USER: quickpoll
+  DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+  REDIS_URL: redis://redis:6379/0
+  DEPLOY_TARGET: ${DEPLOY_TARGET:-Docker Compose (published images)}
+
+services:
+  proxy:
+    image: ${DOCKERHUB_USER:?Set DOCKERHUB_USER in .env}/quickpoll-proxy:${PROXY_TAG:?Set PROXY_TAG in .env}
+    ports:
+      - "80:8080"
+    depends_on:
+      web:
+        condition: service_healthy
+        restart: true    # nginx resolves "web" only when it starts: restart it whenever web is recreated
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 64M }
+        reservations: { memory: 16M }
+
+  web:
+    image: ${DOCKERHUB_USER:?Set DOCKERHUB_USER in .env}/quickpoll:${WEB_TAG:?Set WEB_TAG in .env}
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 320M }
+        reservations: { memory: 160M }
+
+  # Same image as web, different command: applies pending migrations, then exits 0.
+  migrate:
+    image: ${DOCKERHUB_USER:?Set DOCKERHUB_USER in .env}/quickpoll:${WEB_TAG:?Set WEB_TAG in .env}
+    command: ["python", "-m", "quickpoll.migrate"]
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits: { memory: 192M }
+        reservations: { memory: 64M }
+
+  postgres:
+    image: postgres:18-alpine
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+    environment:
+      POSTGRES_DB: quickpoll
+      POSTGRES_USER: quickpoll
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickpoll -d quickpoll"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 384M }
+        reservations: { memory: 128M }
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "32mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 64M }
+        reservations: { memory: 16M }
+
+volumes:
+  pgdata:
